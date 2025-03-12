@@ -48,15 +48,8 @@ type LevelSettings = {
   secondaryColor: string
   backgroundColor1: string
   backgroundColor2: string
-  backgroundColor3: string
   gridColor: string
   mountainColor: string
-  foregroundColor: string
-  midgroundColor: string
-  starsColor: string
-  starsCount: number
-  cloudColor: string
-  cloudCount: number
   pointValue: number
 }
 
@@ -74,12 +67,6 @@ export default function Home() {
   const idCounterRef = useRef(0)
   const mousePositionRef = useRef({ x: 0, y: 0 })
   const animationRef = useRef<number | undefined>(undefined)
-  
-  // Add refs for parallax effect
-  const parallaxOffsetRef = useRef({ x: 0, y: 0 })
-  const starsPositionsRef = useRef<Array<{x: number, y: number, radius: number, opacity: number, glow: boolean}>>([])
-  const cloudsPositionsRef = useRef<Array<{x: number, y: number, radius: number, parts: Array<{dx: number, dy: number, radius: number}>}>>([])
-  const parallaxInitializedRef = useRef(false)
 
   // Fruit colors
   const fruitColors = {
@@ -98,17 +85,10 @@ export default function Home() {
       glowIntensity: 15,
       primaryColor: "#FF00FF",
       secondaryColor: "#00FFFF",
-      backgroundColor1: "#0D0221",
-      backgroundColor2: "#3D0E61",
-      backgroundColor3: "#4A00E0",
+      backgroundColor1: "#4A00E0",
+      backgroundColor2: "#2F80ED",
       gridColor: "rgba(255, 0, 255, 0.2)",
       mountainColor: "rgba(156, 39, 176, 0.7)",
-      foregroundColor: "rgba(76, 29, 149, 0.8)",
-      midgroundColor: "rgba(124, 58, 237, 0.5)",
-      starsColor: "rgba(255, 255, 255, 0.8)",
-      starsCount: 100,
-      cloudColor: "rgba(139, 92, 246, 0.3)",
-      cloudCount: 5,
       pointValue: 100
     },
     2: {
@@ -119,17 +99,10 @@ export default function Home() {
       glowIntensity: 25,
       primaryColor: "#FF0080",
       secondaryColor: "#00FFFF",
-      backgroundColor1: "#0F0326",
-      backgroundColor2: "#4B0082",
-      backgroundColor3: "#6A00E0",
+      backgroundColor1: "#6A00E0",
+      backgroundColor2: "#1F60CD",
       gridColor: "rgba(255, 0, 128, 0.3)",
       mountainColor: "rgba(176, 39, 156, 0.8)",
-      foregroundColor: "rgba(88, 28, 135, 0.8)",
-      midgroundColor: "rgba(139, 92, 246, 0.5)",
-      starsColor: "rgba(255, 255, 255, 0.8)",
-      starsCount: 150,
-      cloudColor: "rgba(167, 139, 250, 0.3)",
-      cloudCount: 7,
       pointValue: 150
     },
     3: {
@@ -140,17 +113,10 @@ export default function Home() {
       glowIntensity: 35,
       primaryColor: "#FF0000",
       secondaryColor: "#FFFF00",
-      backgroundColor1: "#0A001F",
-      backgroundColor2: "#300350",
-      backgroundColor3: "#8A00E0",
+      backgroundColor1: "#8A00E0",
+      backgroundColor2: "#1F40AD",
       gridColor: "rgba(255, 0, 0, 0.4)",
       mountainColor: "rgba(220, 39, 39, 0.8)",
-      foregroundColor: "rgba(109, 40, 217, 0.8)",
-      midgroundColor: "rgba(167, 139, 250, 0.5)",
-      starsColor: "rgba(255, 255, 255, 0.9)",
-      starsCount: 200,
-      cloudColor: "rgba(196, 181, 253, 0.3)",
-      cloudCount: 10,
       pointValue: 250
     }
   }
@@ -183,36 +149,6 @@ export default function Home() {
     // Set canvas dimensions
     canvas.width = window.innerWidth
     canvas.height = window.innerHeight
-    
-    // Initialize parallax elements if not already done
-    if (!parallaxInitializedRef.current) {
-      // Initialize stars positions
-      starsPositionsRef.current = Array.from({ length: settings.starsCount }, () => ({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height * 0.7,
-        radius: Math.random() * 1.5 + 0.5,
-        opacity: Math.random() * 0.5 + 0.5,
-        glow: Math.random() > 0.7
-      }))
-      
-      // Initialize clouds positions
-      cloudsPositionsRef.current = Array.from({ length: settings.cloudCount }, () => {
-        const x = Math.random() * canvas.width
-        const y = Math.random() * canvas.height * 0.5
-        const radius = Math.random() * 50 + 30
-        
-        // Create cloud parts
-        const parts = Array.from({ length: 5 }, () => ({
-          dx: (Math.random() - 0.5) * radius,
-          dy: (Math.random() - 0.5) * radius * 0.5,
-          radius: radius * (0.5 + Math.random() * 0.5)
-        }))
-        
-        return { x, y, radius, parts }
-      })
-      
-      parallaxInitializedRef.current = true
-    }
     
     // Track last time fruits were spawned
     let lastFruitSpawnTime = Date.now()
@@ -265,142 +201,49 @@ export default function Home() {
       return velocity
     }
 
-    // Draw background - enhanced with multiple layers for depth and parallax
+    // Draw background - keeping the neon grid but with level-specific colors
     const drawBackground = () => {
-      // Create deep space gradient background
+      // Create gradient background
       const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height)
       gradient.addColorStop(0, settings.backgroundColor1)
-      gradient.addColorStop(0.5, settings.backgroundColor2)
-      gradient.addColorStop(1, settings.backgroundColor3)
+      gradient.addColorStop(1, settings.backgroundColor2)
 
       ctx.fillStyle = gradient
       ctx.fillRect(0, 0, canvas.width, canvas.height)
-      
-      // Draw stars (distant layer) with subtle parallax
-      for (const star of starsPositionsRef.current) {
-        // Apply parallax effect - distant objects move slower
-        const parallaxFactor = 0.2 // Stars move at 20% of mouse movement
-        const x = star.x + parallaxOffsetRef.current.x * parallaxFactor
-        const y = star.y + parallaxOffsetRef.current.y * parallaxFactor
-        
-        // Wrap stars around screen edges
-        const wrappedX = (x + canvas.width) % canvas.width
-        const wrappedY = (y + canvas.height) % canvas.height
-        
-        ctx.beginPath()
-        ctx.arc(wrappedX, wrappedY, star.radius, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(255, 255, 255, ${star.opacity})`
-        ctx.fill()
-        
-        // Add glow to some stars
-        if (star.glow) {
-          ctx.shadowColor = settings.starsColor
-          ctx.shadowBlur = 5 + Math.random() * 10
-          ctx.beginPath()
-          ctx.arc(wrappedX, wrappedY, star.radius, 0, Math.PI * 2)
-          ctx.fillStyle = "rgba(255, 255, 255, 0.8)"
-          ctx.fill()
-          ctx.shadowBlur = 0
-        }
-      }
-      
-      // Draw clouds (mid-distance layer) with medium parallax
-      for (const cloud of cloudsPositionsRef.current) {
-        // Apply parallax effect - mid-distance objects move at medium speed
-        const parallaxFactor = 0.4 // Clouds move at 40% of mouse movement
-        const x = cloud.x + parallaxOffsetRef.current.x * parallaxFactor
-        const y = cloud.y + parallaxOffsetRef.current.y * parallaxFactor
-        
-        // Draw cloud as a cluster of circles
-        for (const part of cloud.parts) {
-          ctx.beginPath()
-          ctx.arc(x + part.dx, y + part.dy, part.radius, 0, Math.PI * 2)
-          ctx.fillStyle = settings.cloudColor
-          ctx.fill()
-        }
-      }
-      
-      // Draw distant mountains (mid layer) with medium parallax
-      ctx.fillStyle = settings.midgroundColor
-      ctx.beginPath()
-      ctx.moveTo(0, canvas.height)
-      
-      // Create a jagged mountain silhouette for mid layer with parallax
-      const midSegments = 15
-      const midSegmentWidth = canvas.width / midSegments
-      const midParallaxFactor = 0.5 // Mid mountains move at 50% of mouse movement
-      
-      for (let i = 0; i <= midSegments; i++) {
-        const baseX = i * midSegmentWidth
-        // Apply horizontal parallax to x position
-        const x = baseX + parallaxOffsetRef.current.x * midParallaxFactor
-        
-        const heightFactor = Math.sin((i / midSegments) * Math.PI * 1.5) * 0.5 + 0.3
-        // Apply vertical parallax to mountain height
-        const parallaxHeight = heightFactor * canvas.height * 0.4 + parallaxOffsetRef.current.y * midParallaxFactor * 0.5
-        const y = canvas.height - parallaxHeight
-        
-        ctx.lineTo(x, y)
-      }
-      
-      ctx.lineTo(canvas.width, canvas.height)
-      ctx.closePath()
-      ctx.fill()
 
-      // Draw grid (mid layer) with perspective and parallax effect
+      // Draw grid
+      ctx.strokeStyle = settings.gridColor
       ctx.lineWidth = 1
 
-      // Horizontal lines with perspective effect and parallax
+      // Horizontal lines
       for (let y = 0; y < canvas.height; y += 40) {
-        const opacity = 1 - (y / canvas.height) * 0.7 // Lines fade with distance
-        ctx.strokeStyle = settings.gridColor.replace(')', `, ${opacity})`).replace('rgba', 'rgba')
-        
-        // Apply parallax to grid - stronger effect for closer lines (at bottom)
-        const parallaxFactor = 0.3 + (y / canvas.height) * 0.4 // 0.3 to 0.7 based on y position
-        const yOffset = y + parallaxOffsetRef.current.y * parallaxFactor
-        
         ctx.beginPath()
-        ctx.moveTo(0, yOffset)
-        ctx.lineTo(canvas.width, yOffset)
+        ctx.moveTo(0, y)
+        ctx.lineTo(canvas.width, y)
         ctx.stroke()
       }
 
-      // Vertical lines with perspective effect and parallax
+      // Vertical lines
       for (let x = 0; x < canvas.width; x += 40) {
-        const opacity = 0.8 - Math.abs((x / canvas.width) - 0.5) * 0.6 // Center lines more visible
-        ctx.strokeStyle = settings.gridColor.replace(')', `, ${opacity})`).replace('rgba', 'rgba')
-        
-        // Apply parallax to grid - stronger effect for lines away from center
-        const distanceFromCenter = Math.abs((x / canvas.width) - 0.5)
-        const parallaxFactor = 0.4 + distanceFromCenter * 0.4 // 0.4 to 0.8 based on distance from center
-        const xOffset = x + parallaxOffsetRef.current.x * parallaxFactor
-        
         ctx.beginPath()
-        ctx.moveTo(xOffset, 0)
-        ctx.lineTo(xOffset, canvas.height)
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x, canvas.height)
         ctx.stroke()
       }
 
-      // Draw foreground mountains (front layer) with strong parallax
-      ctx.fillStyle = settings.foregroundColor
+      // Draw mountains
+      ctx.fillStyle = settings.mountainColor
       ctx.beginPath()
       ctx.moveTo(0, canvas.height)
 
-      // Create a jagged mountain silhouette for front layer with parallax
+      // Create a jagged mountain silhouette
       const segments = 10
       const segmentWidth = canvas.width / segments
-      const foregroundParallaxFactor = 0.8 // Foreground moves at 80% of mouse movement
-      
+
       for (let i = 0; i <= segments; i++) {
-        const baseX = i * segmentWidth
-        // Apply horizontal parallax to x position
-        const x = baseX + parallaxOffsetRef.current.x * foregroundParallaxFactor
-        
+        const x = i * segmentWidth
         const heightFactor = Math.sin((i / segments) * Math.PI) * 0.5 + 0.5
-        // Apply vertical parallax to mountain height
-        const parallaxHeight = heightFactor * canvas.height * 0.3 + parallaxOffsetRef.current.y * foregroundParallaxFactor * 0.5
-        const y = canvas.height - parallaxHeight
-        
+        const y = canvas.height - heightFactor * canvas.height * 0.3
         ctx.lineTo(x, y)
       }
 
@@ -536,23 +379,13 @@ export default function Home() {
       ctx.restore()
     }
 
-    // Handle mouse movement for slicing and parallax effect
+    // Handle mouse movement for slicing
     const handleMouseMove = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect()
-      const newMousePosition = {
+      mousePositionRef.current = {
         x: e.clientX - rect.left,
         y: e.clientY - rect.top
       }
-      
-      // Calculate parallax offset based on mouse position
-      // Mouse in center = no offset, mouse at edges = maximum offset
-      const parallaxStrength = 20 // Maximum pixel offset
-      parallaxOffsetRef.current = {
-        x: ((newMousePosition.x / canvas.width) - 0.5) * parallaxStrength,
-        y: ((newMousePosition.y / canvas.height) - 0.5) * parallaxStrength
-      }
-      
-      mousePositionRef.current = newMousePosition
       
       // Check for fruit slicing
       for (let i = 0; i < fruitsRef.current.length; i++) {
@@ -736,9 +569,6 @@ export default function Home() {
       clearInterval(fruitInterval)
       canvas.removeEventListener("mousemove", handleMouseMove)
       canvas.removeEventListener("touchmove", handleTouchMove)
-      
-      // Reset parallax initialization when component unmounts
-      parallaxInitializedRef.current = false
     }
   }, [gameState, score, level])
 
@@ -767,7 +597,7 @@ export default function Home() {
     return (
       <div className={`relative ${fontSize} font-bold ${className}`}>
         <div className="absolute inset-0 text-cyan-400 blur-[1px] animate-pulse opacity-70">{children}</div>
-        <div className={`relative z-10 neon-text ${glitchText ? "animate-glitch" : ""}`}>{children}</div>
+        <div className={`relative z-10 ${glitchText ? "animate-glitch" : ""}`}>{children}</div>
       </div>
     )
   }
@@ -781,7 +611,7 @@ export default function Home() {
       <div className={`absolute inset-0 z-20 flex flex-col items-center justify-center ${gameState === "playing" ? "pointer-events-none" : ""}`}>
         {gameState === "title" && (
           <div className="flex flex-col items-center justify-center space-y-8 pointer-events-auto">
-            <div className="text-center transform-3d">
+            <div className="text-center">
               <CRTText className="text-6xl md:text-8xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 mb-2">
                 NEON FRUIT
               </CRTText>
@@ -790,17 +620,17 @@ export default function Home() {
               </CRTText>
             </div>
 
-            <div className="relative transform-3d">
+            <div className="relative">
               <button
                 onClick={handleStartSelection}
-                className="relative px-10 py-4 text-2xl font-bold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg overflow-hidden group depth-shadow"
+                className="relative px-10 py-4 text-2xl font-bold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg overflow-hidden group"
               >
                 <span className="relative z-10">START GAME</span>
                 <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
               </button>
             </div>
 
-            <div className="text-center max-w-md px-4 bg-pulse">
+            <div className="text-center max-w-md px-4">
               <CRTText fontSize="text-lg" className="text-cyan-300">
                 Slice fruits in a neon dimension!
               </CRTText>
@@ -812,7 +642,7 @@ export default function Home() {
         )}
         
         {gameState === "level_select" && (
-          <div className="flex flex-col items-center justify-center space-y-8 pointer-events-auto bg-purple-900 bg-opacity-80 p-8 rounded-xl shadow-xl depth-shadow transform-3d">
+          <div className="flex flex-col items-center justify-center space-y-8 pointer-events-auto bg-purple-900 bg-opacity-80 p-8 rounded-xl shadow-xl">
             <CRTText className="text-4xl md:text-5xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-pink-500">
               SELECT DIFFICULTY
             </CRTText>
@@ -820,27 +650,27 @@ export default function Home() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <button
                 onClick={() => handleSelectLevel(1)}
-                className="px-8 py-6 text-xl font-bold text-white bg-gradient-to-r from-indigo-600 to-blue-600 rounded-lg hover:from-indigo-500 hover:to-blue-500 transition-colors duration-300 w-64 h-48 flex flex-col items-center justify-center depth-shadow transform-3d hover:scale-105"
+                className="px-8 py-6 text-xl font-bold text-white bg-gradient-to-r from-indigo-600 to-blue-600 rounded-lg hover:from-indigo-500 hover:to-blue-500 transition-colors duration-300 w-64 h-48 flex flex-col items-center justify-center"
               >
-                <span className="text-2xl mb-2 neon-text">LEVEL 1</span>
+                <span className="text-2xl mb-2">LEVEL 1</span>
                 <span className="text-cyan-300 text-sm mb-1">CHILL MODE</span>
                 <span className="text-white text-xs opacity-80">Normal Speed</span>
               </button>
               
               <button
                 onClick={() => handleSelectLevel(2)}
-                className="px-8 py-6 text-xl font-bold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg hover:from-purple-500 hover:to-pink-500 transition-colors duration-300 w-64 h-48 flex flex-col items-center justify-center depth-shadow transform-3d hover:scale-105"
+                className="px-8 py-6 text-xl font-bold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg hover:from-purple-500 hover:to-pink-500 transition-colors duration-300 w-64 h-48 flex flex-col items-center justify-center"
               >
-                <span className="text-2xl mb-2 neon-text">LEVEL 2</span>
+                <span className="text-2xl mb-2">LEVEL 2</span>
                 <span className="text-pink-300 text-sm mb-1">HYPER MODE</span>
                 <span className="text-white text-xs opacity-80">50% Faster</span>
               </button>
               
               <button
                 onClick={() => handleSelectLevel(3)}
-                className="px-8 py-6 text-xl font-bold text-white bg-gradient-to-r from-red-600 to-yellow-600 rounded-lg hover:from-red-500 hover:to-yellow-500 transition-colors duration-300 w-64 h-48 flex flex-col items-center justify-center depth-shadow transform-3d hover:scale-105"
+                className="px-8 py-6 text-xl font-bold text-white bg-gradient-to-r from-red-600 to-yellow-600 rounded-lg hover:from-red-500 hover:to-yellow-500 transition-colors duration-300 w-64 h-48 flex flex-col items-center justify-center"
               >
-                <span className="text-2xl mb-2 neon-text">LEVEL 3</span>
+                <span className="text-2xl mb-2">LEVEL 3</span>
                 <span className="text-yellow-300 text-sm mb-1">EXTREME MODE</span>
                 <span className="text-white text-xs opacity-80">120% Faster</span>
               </button>
@@ -848,7 +678,7 @@ export default function Home() {
             
             <button
               onClick={() => setGameState("title")}
-              className="mt-4 px-6 py-2 text-sm font-bold text-white bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors duration-300 depth-shadow"
+              className="mt-4 px-6 py-2 text-sm font-bold text-white bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors duration-300"
             >
               BACK
             </button>
@@ -882,31 +712,7 @@ export default function Home() {
         .animate-glitch {
           animation: glitch 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
         }
-        
-        /* Add 3D rotation effect on mouse move for depth */
-        .transform-3d:hover {
-          transform: perspective(1000px) rotateX(var(--rotate-x, 0deg)) rotateY(var(--rotate-y, 0deg));
-        }
       `}</style>
-      
-      {/* Add script for 3D rotation effect on mouse move */}
-      <script dangerouslySetInnerHTML={{
-        __html: `
-          document.addEventListener('mousemove', (e) => {
-            const elements = document.querySelectorAll('.transform-3d');
-            const centerX = window.innerWidth / 2;
-            const centerY = window.innerHeight / 2;
-            
-            elements.forEach(element => {
-              const rotateX = (centerY - e.clientY) / 50;
-              const rotateY = (e.clientX - centerX) / 50;
-              
-              element.style.setProperty('--rotate-x', rotateX + 'deg');
-              element.style.setProperty('--rotate-y', rotateY + 'deg');
-            });
-          });
-        `
-      }} />
     </div>
   )
 }

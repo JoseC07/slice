@@ -57,12 +57,6 @@ export default function FixedNeonFruit() {
   const fruitIdCounterRef = useRef(0)
   const mousePositionRef = useRef({ x: 0, y: 0 })
   const scoreIdCounterRef = useRef(0)
-  
-  // Add refs for parallax effect
-  const parallaxOffsetRef = useRef({ x: 0, y: 0 })
-  const starsPositionsRef = useRef<Array<{x: number, y: number, radius: number, opacity: number, glow: boolean}>>([])
-  const nebulasPositionsRef = useRef<Array<{x: number, y: number, radius: number, hue: number, parts: Array<{dx: number, dy: number, radius: number}>}>>([])
-  const parallaxInitializedRef = useRef(false)
 
   // Fruit colors
   const fruitColors = {
@@ -101,55 +95,14 @@ export default function FixedNeonFruit() {
 
     setCanvasDimensions()
     window.addEventListener("resize", setCanvasDimensions)
-    
-    // Initialize parallax elements if not already done
-    if (!parallaxInitializedRef.current) {
-      // Initialize stars positions
-      starsPositionsRef.current = Array.from({ length: 150 }, () => ({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height * 0.7,
-        radius: Math.random() * 1.5 + 0.5,
-        opacity: Math.random() * 0.5 + 0.5,
-        glow: Math.random() > 0.7
-      }))
-      
-      // Initialize nebula positions
-      nebulasPositionsRef.current = Array.from({ length: 7 }, () => {
-        const x = Math.random() * canvas.width
-        const y = Math.random() * canvas.height * 0.5
-        const radius = Math.random() * 70 + 50
-        const hue = Math.floor(Math.random() * 60) + 240 // Blue to purple range
-        
-        // Create nebula parts
-        const parts = Array.from({ length: 5 }, () => ({
-          dx: (Math.random() - 0.5) * radius,
-          dy: (Math.random() - 0.5) * radius * 0.5,
-          radius: radius * (0.5 + Math.random() * 0.5)
-        }))
-        
-        return { x, y, radius, hue, parts }
-      })
-      
-      parallaxInitializedRef.current = true
-    }
 
-    // Track mouse position for hover effects and parallax
+    // Track mouse position for hover effects
     const handleMouseMove = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect()
-      const newMousePosition = {
+      mousePositionRef.current = {
         x: e.clientX - rect.left,
         y: e.clientY - rect.top
       }
-      
-      // Calculate parallax offset based on mouse position
-      // Mouse in center = no offset, mouse at edges = maximum offset
-      const parallaxStrength = 20 // Maximum pixel offset
-      parallaxOffsetRef.current = {
-        x: ((newMousePosition.x / canvas.width) - 0.5) * parallaxStrength,
-        y: ((newMousePosition.y / canvas.height) - 0.5) * parallaxStrength
-      }
-      
-      mousePositionRef.current = newMousePosition
     }
     
     canvas.addEventListener("mousemove", handleMouseMove)
@@ -338,151 +291,49 @@ export default function FixedNeonFruit() {
       ctx.restore()
     }
 
-    // Draw background with parallax effects
+    // Draw background
     const drawBackground = () => {
-      // Create deep space gradient background
+      // Create gradient background
       const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height)
-      gradient.addColorStop(0, "#0D0221") // Deep space purple
-      gradient.addColorStop(0.5, "#3D0E61") // Mid purple
-      gradient.addColorStop(1, "#4A00E0") // Bright purple
+      gradient.addColorStop(0, "#4A00E0") // Deep purple
+      gradient.addColorStop(1, "#2F80ED") // Bright blue
 
       ctx.fillStyle = gradient
       ctx.fillRect(0, 0, canvas.width, canvas.height)
-      
-      // Draw stars (distant layer) with subtle parallax
-      for (const star of starsPositionsRef.current) {
-        // Apply parallax effect - distant objects move slower
-        const parallaxFactor = 0.2 // Stars move at 20% of mouse movement
-        const x = star.x + parallaxOffsetRef.current.x * parallaxFactor
-        const y = star.y + parallaxOffsetRef.current.y * parallaxFactor
-        
-        // Wrap stars around screen edges
-        const wrappedX = (x + canvas.width) % canvas.width
-        const wrappedY = (y + canvas.height) % canvas.height
-        
-        ctx.beginPath()
-        ctx.arc(wrappedX, wrappedY, star.radius, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(255, 255, 255, ${star.opacity})`
-        ctx.fill()
-        
-        // Add glow to some stars
-        if (star.glow) {
-          ctx.shadowColor = "rgba(255, 255, 255, 0.8)"
-          ctx.shadowBlur = 5 + Math.random() * 10
-          ctx.beginPath()
-          ctx.arc(wrappedX, wrappedY, star.radius, 0, Math.PI * 2)
-          ctx.fillStyle = "rgba(255, 255, 255, 0.8)"
-          ctx.fill()
-          ctx.shadowBlur = 0
-        }
-      }
-      
-      // Draw nebula clouds (distant layer) with subtle parallax
-      for (const nebula of nebulasPositionsRef.current) {
-        // Apply parallax effect - nebulas move at medium speed
-        const parallaxFactor = 0.3 // Nebulas move at 30% of mouse movement
-        const x = nebula.x + parallaxOffsetRef.current.x * parallaxFactor
-        const y = nebula.y + parallaxOffsetRef.current.y * parallaxFactor
-        
-        // Draw nebula as a cluster of circles
-        for (const part of nebula.parts) {
-          // Create a radial gradient for the nebula
-          const nebulaGradient = ctx.createRadialGradient(
-            x + part.dx, y + part.dy, 0,
-            x + part.dx, y + part.dy, part.radius
-          )
-          
-          nebulaGradient.addColorStop(0, `hsla(${nebula.hue}, 100%, 70%, 0.3)`)
-          nebulaGradient.addColorStop(1, `hsla(${nebula.hue}, 100%, 50%, 0)`)
-          
-          ctx.beginPath()
-          ctx.arc(x + part.dx, y + part.dy, part.radius, 0, Math.PI * 2)
-          ctx.fillStyle = nebulaGradient
-          ctx.fill()
-        }
-      }
-      
-      // Draw distant mountains (mid layer) with medium parallax
-      ctx.fillStyle = "rgba(124, 58, 237, 0.5)" // Purple midground
-      ctx.beginPath()
-      ctx.moveTo(0, canvas.height)
-      
-      // Create a jagged mountain silhouette for mid layer with parallax
-      const midSegments = 15
-      const midSegmentWidth = canvas.width / midSegments
-      const midParallaxFactor = 0.5 // Mid mountains move at 50% of mouse movement
-      
-      for (let i = 0; i <= midSegments; i++) {
-        const baseX = i * midSegmentWidth
-        // Apply horizontal parallax to x position
-        const x = baseX + parallaxOffsetRef.current.x * midParallaxFactor
-        
-        const heightFactor = Math.sin((i / midSegments) * Math.PI * 1.5) * 0.5 + 0.3
-        // Apply vertical parallax to mountain height
-        const parallaxHeight = heightFactor * canvas.height * 0.4 + parallaxOffsetRef.current.y * midParallaxFactor * 0.5
-        const y = canvas.height - parallaxHeight
-        
-        ctx.lineTo(x, y)
-      }
-      
-      ctx.lineTo(canvas.width, canvas.height)
-      ctx.closePath()
-      ctx.fill()
 
-      // Draw grid (mid layer) with perspective and parallax effect
+      // Draw grid
+      ctx.strokeStyle = "rgba(255, 0, 255, 0.2)"
       ctx.lineWidth = 1
 
-      // Horizontal lines with perspective effect and parallax
+      // Horizontal lines
       for (let y = 0; y < canvas.height; y += 40) {
-        const opacity = 1 - (y / canvas.height) * 0.7 // Lines fade with distance
-        ctx.strokeStyle = `rgba(255, 0, 255, ${opacity * 0.2})`
-        
-        // Apply parallax to grid - stronger effect for closer lines (at bottom)
-        const parallaxFactor = 0.3 + (y / canvas.height) * 0.4 // 0.3 to 0.7 based on y position
-        const yOffset = y + parallaxOffsetRef.current.y * parallaxFactor
-        
         ctx.beginPath()
-        ctx.moveTo(0, yOffset)
-        ctx.lineTo(canvas.width, yOffset)
+        ctx.moveTo(0, y)
+        ctx.lineTo(canvas.width, y)
         ctx.stroke()
       }
 
-      // Vertical lines with perspective effect and parallax
+      // Vertical lines
       for (let x = 0; x < canvas.width; x += 40) {
-        const opacity = 0.8 - Math.abs((x / canvas.width) - 0.5) * 0.6 // Center lines more visible
-        ctx.strokeStyle = `rgba(255, 0, 255, ${opacity * 0.2})`
-        
-        // Apply parallax to grid - stronger effect for lines away from center
-        const distanceFromCenter = Math.abs((x / canvas.width) - 0.5)
-        const parallaxFactor = 0.4 + distanceFromCenter * 0.4 // 0.4 to 0.8 based on distance from center
-        const xOffset = x + parallaxOffsetRef.current.x * parallaxFactor
-        
         ctx.beginPath()
-        ctx.moveTo(xOffset, 0)
-        ctx.lineTo(xOffset, canvas.height)
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x, canvas.height)
         ctx.stroke()
       }
 
-      // Draw foreground mountains (front layer) with strong parallax
-      ctx.fillStyle = "rgba(76, 29, 149, 0.8)" // Deep purple foreground
+      // Draw mountains
+      ctx.fillStyle = "rgba(156, 39, 176, 0.7)"
       ctx.beginPath()
       ctx.moveTo(0, canvas.height)
 
-      // Create a jagged mountain silhouette for front layer with parallax
+      // Create a jagged mountain silhouette
       const segments = 10
       const segmentWidth = canvas.width / segments
-      const foregroundParallaxFactor = 0.8 // Foreground moves at 80% of mouse movement
-      
+
       for (let i = 0; i <= segments; i++) {
-        const baseX = i * segmentWidth
-        // Apply horizontal parallax to x position
-        const x = baseX + parallaxOffsetRef.current.x * foregroundParallaxFactor
-        
+        const x = i * segmentWidth
         const heightFactor = Math.sin((i / segments) * Math.PI) * 0.5 + 0.5
-        // Apply vertical parallax to mountain height
-        const parallaxHeight = heightFactor * canvas.height * 0.3 + parallaxOffsetRef.current.y * foregroundParallaxFactor * 0.5
-        const y = canvas.height - parallaxHeight
-        
+        const y = canvas.height - heightFactor * canvas.height * 0.3
         ctx.lineTo(x, y)
       }
 
@@ -712,9 +563,6 @@ export default function FixedNeonFruit() {
       canvas.removeEventListener("click", handleCanvasClick)
       canvas.removeEventListener("touchstart", handleCanvasClick)
       canvas.removeEventListener("mousemove", handleMouseMove)
-      
-      // Reset parallax initialization when component unmounts
-      parallaxInitializedRef.current = false
     }
   }, [gameState, score])
 
@@ -738,7 +586,7 @@ export default function FixedNeonFruit() {
     return (
       <div className={`relative ${fontSize} font-bold ${className}`}>
         <div className="absolute inset-0 text-cyan-400 blur-[1px] animate-pulse opacity-70">{children}</div>
-        <div className={`relative z-10 neon-text ${glitchText ? "animate-glitch" : ""}`}>{children}</div>
+        <div className={`relative z-10 ${glitchText ? "animate-glitch" : ""}`}>{children}</div>
       </div>
     )
   }
@@ -752,7 +600,7 @@ export default function FixedNeonFruit() {
       <div className={`absolute inset-0 z-20 flex flex-col items-center justify-center ${gameState === "playing" ? "pointer-events-none" : ""}`}>
         {gameState === "title" && (
           <div className="flex flex-col items-center justify-center space-y-8 pointer-events-auto">
-            <div className="text-center transform-3d">
+            <div className="text-center">
               <CRTText className="text-6xl md:text-8xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 mb-2">
                 NEON FRUIT
               </CRTText>
@@ -761,17 +609,17 @@ export default function FixedNeonFruit() {
               </CRTText>
             </div>
 
-            <div className="relative transform-3d">
+            <div className="relative">
               <button
                 onClick={handleStartGame}
-                className="relative px-10 py-4 text-2xl font-bold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg overflow-hidden group depth-shadow"
+                className="relative px-10 py-4 text-2xl font-bold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg overflow-hidden group"
               >
                 <span className="relative z-10">START GAME</span>
                 <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
               </button>
             </div>
 
-            <div className="text-center max-w-md px-4 bg-pulse">
+            <div className="text-center max-w-md px-4">
               <CRTText fontSize="text-lg" className="text-cyan-300">
                 Slice fruits in a neon dimension!
               </CRTText>
@@ -809,31 +657,7 @@ export default function FixedNeonFruit() {
         .animate-glitch {
           animation: glitch 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
         }
-        
-        /* Add 3D rotation effect on mouse move for depth */
-        .transform-3d:hover {
-          transform: perspective(1000px) rotateX(var(--rotate-x, 0deg)) rotateY(var(--rotate-y, 0deg));
-        }
       `}</style>
-      
-      {/* Add script for 3D rotation effect on mouse move */}
-      <script dangerouslySetInnerHTML={{
-        __html: `
-          document.addEventListener('mousemove', (e) => {
-            const elements = document.querySelectorAll('.transform-3d');
-            const centerX = window.innerWidth / 2;
-            const centerY = window.innerHeight / 2;
-            
-            elements.forEach(element => {
-              const rotateX = (centerY - e.clientY) / 50;
-              const rotateY = (e.clientX - centerX) / 50;
-              
-              element.style.setProperty('--rotate-x', rotateX + 'deg');
-              element.style.setProperty('--rotate-y', rotateY + 'deg');
-            });
-          });
-        `
-      }} />
     </div>
   )
 }
