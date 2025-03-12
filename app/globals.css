@@ -116,6 +116,35 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-black text-foreground;
+    overflow-x: hidden;
   }
+}
+
+.floating-container {
+  @apply relative mx-auto my-10 p-8 rounded-lg shadow-xl;
+  background: rgba(0, 0, 0, 0.8);
+  border: 2px solid #00FFFF;
+  box-shadow: 0 0 20px #00FFFF, inset 0 0 10px #00FFFF;
+  max-width: 1200px;
+}
+
+.layered-bg::before,
+.layered-bg::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 110%;
+  height: 110%;
+  background: radial-gradient(circle, rgba(0, 255, 255, 0.1), transparent);
+  border-radius: 50%;
+  z-index: -1;
+}
+
+.layered-bg::after {
+  width: 130%;
+  height: 130%;
+  background: radial-gradient(circle, rgba(255, 0, 255, 0.05), transparent);
 }

@@ -27,6 +27,7 @@ type SlicedFruit = {
   sliceAngle: number
   pieces: { dx: number; dy: number; rotation: number }[]
   timeLeft: number
+  decompositionStage: number // Add this to track the decomposition progress
 }
 
 // Add type for floating score text
@@ -209,61 +210,135 @@ export default function FixedNeonFruit() {
 
     // Draw a sliced fruit
     const drawSlicedFruit = (sliced: SlicedFruit) => {
-      const { x, y, radius, rotation, type, sliceAngle, pieces } = sliced
+      const { x, y, radius, rotation, type, sliceAngle, pieces, timeLeft } = sliced
       
-      // Draw each piece
+      // Calculate decomposition progress (0 to 5 layers)
+      // More gradual decomposition for the longer timeLeft value
+      const decompositionLayers = Math.min(5, Math.floor((120 - timeLeft) / 24));
+      
+      // Draw each half
       pieces.forEach((piece, index) => {
         ctx.save()
-        ctx.translate(
-          x + piece.dx * (30 - sliced.timeLeft), 
-          y + piece.dy * (30 - sliced.timeLeft)
-        )
-        ctx.rotate(rotation + piece.rotation)
         
-        // Draw a quarter of the fruit
+        // Position the half with movement based on time and apply gravity effect
+        const elapsedTime = (120 - timeLeft) / 20; // Adjusted for longer timeLeft
+        const gravityEffect = 0.5 * 0.15 * Math.pow(elapsedTime, 2); // Physics formula for gravity
+        
+        ctx.translate(
+          x + piece.dx * elapsedTime, 
+          y + piece.dy * elapsedTime + gravityEffect
+        )
+        
+        // Rotate the half with slight additional rotation over time for more natural movement
+        const additionalRotation = piece.dy * elapsedTime * 0.02;
+        ctx.rotate(piece.rotation + additionalRotation);
+        
+        // Draw a half of the fruit
         ctx.beginPath()
         ctx.moveTo(0, 0)
-        const startAngle = (index * Math.PI / 2) + sliceAngle
-        const endAngle = startAngle + Math.PI / 2
+        const startAngle = index === 0 ? 0 : Math.PI
+        const endAngle = index === 0 ? Math.PI : Math.PI * 2
         ctx.arc(0, 0, radius, startAngle, endAngle)
         ctx.closePath()
         
-        // Create gradient
-        const gradient = ctx.createRadialGradient(-radius * 0.3, -radius * 0.3, 0, 0, 0, radius)
-        gradient.addColorStop(0, type === "orange" ? "#FFAB40" : type === "lemon" ? "#FFF59D" : "#AED581")
-        gradient.addColorStop(0.7, fruitColors[type])
-        gradient.addColorStop(1, type === "orange" ? "#E65100" : type === "lemon" ? "#F57F17" : "#33691E")
+        // Create layers for the fruit (from outer to inner)
+        const layerCount = 5; // 5 layers total
+        const layerWidth = radius / layerCount;
         
-        ctx.fillStyle = gradient
-        ctx.fill()
+        // Draw each layer from outer to inner
+        for (let layer = 0; layer < layerCount; layer++) {
+          const layerRadius = radius - (layer * layerWidth);
+          
+          // Skip if this layer is too small
+          if (layerRadius <= 0) continue;
+          
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.arc(0, 0, layerRadius, startAngle, endAngle);
+          ctx.closePath();
+          
+          // Determine if this layer should be decomposed (green)
+          const isDecomposed = layer < decompositionLayers;
+          
+          // Create gradient for this layer
+          const gradient = ctx.createRadialGradient(-layerRadius * 0.3, -layerRadius * 0.3, 0, 0, 0, layerRadius);
+          
+          if (isDecomposed) {
+            // More vibrant green decomposition colors with pulsing effect
+            const pulseIntensity = 0.2 * Math.sin((120 - timeLeft) * 0.1) + 0.8; // Pulsing effect between 0.6-1.0
+            
+            // Different green shades for different layers to emphasize decomposition
+            if (layer === 0) {
+              // Outermost layer - brightest green
+              gradient.addColorStop(0, "#CAFFCA");
+              gradient.addColorStop(0.7, `rgba(102, 204, 102, ${pulseIntensity})`);
+              gradient.addColorStop(1, "#338833");
+            } else if (layer === 1) {
+              // Second layer - medium green
+              gradient.addColorStop(0, "#AAFFAA");
+              gradient.addColorStop(0.7, `rgba(85, 187, 85, ${pulseIntensity})`);
+              gradient.addColorStop(1, "#227722");
+            } else {
+              // Inner layers - darker green
+              gradient.addColorStop(0, "#88EE88");
+              gradient.addColorStop(0.7, `rgba(68, 170, 68, ${pulseIntensity})`);
+              gradient.addColorStop(1, "#116611");
+            }
+          } else {
+            // Normal fruit colors
+            gradient.addColorStop(0, type === "orange" ? "#FFAB40" : type === "lemon" ? "#FFF59D" : "#AED581");
+            gradient.addColorStop(0.7, fruitColors[type]);
+            gradient.addColorStop(1, type === "orange" ? "#E65100" : type === "lemon" ? "#F57F17" : "#33691E");
+          }
+          
+          ctx.fillStyle = gradient;
+          ctx.fill();
+          
+          // Neon outline for the outer layer only
+          if (layer === 0) {
+            ctx.strokeStyle = isDecomposed ? 
+              `rgba(102, 204, 102, ${0.7 + 0.3 * Math.sin((120 - timeLeft) * 0.1)})` : // Glowing green outline
+              `${fruitColors[type]}AA`;
+            ctx.lineWidth = isDecomposed ? 3 : 2; // Thicker outline for decomposed state
+            ctx.stroke();
+          }
+        }
         
-        // Neon outline
-        ctx.strokeStyle = `${fruitColors[type]}AA`
-        ctx.lineWidth = 3
-        ctx.stroke()
+        // For decomposing pieces, add a subtle green glow
+        if (decompositionLayers > 0) {
+          ctx.shadowColor = "#66CC66";
+          ctx.shadowBlur = 10 + 5 * Math.sin((120 - timeLeft) * 0.1); // Pulsing glow
+          ctx.beginPath();
+          ctx.arc(0, 0, radius, startAngle, endAngle);
+          ctx.strokeStyle = "rgba(102, 204, 102, 0.3)";
+          ctx.lineWidth = 5;
+          ctx.stroke();
+        }
         
-        ctx.restore()
-      })
+        ctx.restore();
+      });
       
-      // Draw "SLICED!" text at the position where the fruit was sliced
-      ctx.save()
-      ctx.translate(x, y)
-      
-      // Make text fade out as the animation progresses
-      const opacity = sliced.timeLeft / 30
-      
-      // Draw text with glow effect
-      ctx.font = `bold ${Math.floor(radius/2)}px monospace`
-      ctx.textAlign = "center"
-      ctx.textBaseline = "middle"
-      
-      // Text glow
-      ctx.shadowColor = "#FF00FF"
-      ctx.shadowBlur = 15
-      ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`
-      ctx.fillText("SLICED!", 0, 0)
-      
-      ctx.restore()
+      // Only show text at the beginning of the animation
+      if (timeLeft > 100) { // Adjusted for longer timeLeft
+        ctx.save();
+        ctx.translate(x, y);
+        
+        // Make text fade out
+        const opacity = (timeLeft - 100) / 20;
+        
+        // Draw text with glow effect
+        ctx.font = `bold ${Math.floor(radius/2)}px monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        
+        // Text glow
+        ctx.shadowColor = "#FF00FF";
+        ctx.shadowBlur = 15;
+        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+        ctx.fillText("SLICED!", 0, 0);
+        
+        ctx.restore();
+      }
     }
     
     // Draw floating score text
@@ -342,7 +417,7 @@ export default function FixedNeonFruit() {
       ctx.fill()
     }
 
-    // Add click and touch event handlers
+    // Update the handleCanvasClick function to make fruits split into exactly two halves
     const handleCanvasClick = (e: MouseEvent | TouchEvent) => {
       let clickX: number, clickY: number
       const rect = canvas.getBoundingClientRect()
@@ -370,14 +445,24 @@ export default function FixedNeonFruit() {
           // Calculate slice angle based on click position
           const sliceAngle = Math.atan2(dy, dx)
           
-          // Create sliced fruit animation
-          const pieces = Array.from({ length: 4 }, () => ({
-            dx: (Math.random() - 0.5) * 5,
-            dy: (Math.random() - 0.5) * 5 - 2, // Add upward velocity
-            rotation: Math.random() * Math.PI * 2
-          }))
+          // Create exactly two pieces (halves) with deterministic directions
+          // Each half moves perpendicular to the slice angle
+          const pieces = [
+            // First half
+            {
+              dx: Math.cos(sliceAngle + Math.PI/2) * 1.5, // Perpendicular to slice angle
+              dy: Math.sin(sliceAngle + Math.PI/2) * 1.5 - 1, // Add slight upward velocity
+              rotation: sliceAngle // Aligned with slice direction
+            },
+            // Second half
+            {
+              dx: Math.cos(sliceAngle - Math.PI/2) * 1.5, // Opposite perpendicular
+              dy: Math.sin(sliceAngle - Math.PI/2) * 1.5 - 1, // Add slight upward velocity
+              rotation: sliceAngle + Math.PI // Opposite alignment
+            }
+          ]
           
-          // Add to sliced fruits
+          // Add to sliced fruits with decompositionStage
           setSlicedFruits(prev => [
             ...prev,
             {
@@ -389,7 +474,8 @@ export default function FixedNeonFruit() {
               rotation: fruit.rotation,
               sliceAngle,
               pieces,
-              timeLeft: 30 // Animation frames
+              timeLeft: 120, // Double the animation time to allow for slower decomposition
+              decompositionStage: 0 // Start at stage 0 (no decomposition)
             }
           ])
           
@@ -510,10 +596,25 @@ export default function FixedNeonFruit() {
             timeLeft: sliced.timeLeft - 1,
             pieces: sliced.pieces.map(piece => ({
               ...piece,
-              dy: piece.dy + 0.1 // Add gravity to pieces
+              // Apply more gravity to pieces so they fall more naturally
+              dy: piece.dy + 0.15, // Increased gravity effect
+              dx: piece.dx * 0.98 // Slow down horizontal movement slightly
             }))
           }))
-          .filter(sliced => sliced.timeLeft > 0)
+          // Only remove sliced fruits if they're off-screen (below the canvas)
+          .filter(sliced => {
+            // Keep fruits that still have time left
+            if (sliced.timeLeft > 0) return true;
+            
+            // Check if all pieces are below the screen
+            const allPiecesBelowScreen = sliced.pieces.every(piece => {
+              const posY = sliced.y + piece.dy * (120 - sliced.timeLeft) / 20 + 
+                           0.5 * 0.15 * Math.pow((120 - sliced.timeLeft) / 20, 2);
+              return posY > canvas.height + sliced.radius;
+            });
+            
+            return !allPiecesBelowScreen;
+          })
           
         // Draw all sliced fruits
         updated.forEach(drawSlicedFruit)

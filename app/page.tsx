@@ -2,6 +2,17 @@
 
 import { useEffect, useRef, useState } from "react"
 
+// Update the piece type first
+type FruitPiece = {
+  dx: number;
+  dy: number;
+  x: number;
+  y: number;
+  radius: number;
+  velocityX?: number;
+  velocityY?: number;
+};
+
 // Simplified types
 type Fruit = {
   id: number
@@ -13,6 +24,8 @@ type Fruit = {
   velocityY: number
   rotation: number
   rotationSpeed: number
+  sliced: boolean
+  pieces: FruitPiece[]
 }
 
 // Simplified sliced fruit type
@@ -24,7 +37,7 @@ type SlicedFruit = {
   radius: number
   rotation: number
   timeLeft: number
-  pieces: { dx: number; dy: number }[]
+  pieces: FruitPiece[]
 }
 
 // Simplified floating score type
@@ -56,9 +69,10 @@ type LevelSettings = {
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [score, setScore] = useState(0)
-  const [gameState, setGameState] = useState<"title" | "level_select" | "playing">("title")
+  const [gameState, setGameState] = useState<"title" | "level_select" | "playing" | "game_over">("title")
   const [level, setLevel] = useState(1)
   const [glitchText, setGlitchText] = useState(false)
+  const [missedFruits, setMissedFruits] = useState(0)
   
   // Use refs for better performance with animations
   const fruitsRef = useRef<Fruit[]>([])
@@ -146,38 +160,72 @@ export default function Home() {
     // Get current level settings
     const settings = levelSettings[level]
 
+    // Move the setCanvasDimensions function before it's used
+    // Define setCanvasDimensions before it's used
+    const setCanvasDimensions = () => {
+      // Get parent container dimensions exactly
+      const parentElement = canvas.parentElement;
+      if (!parentElement) return;
+      
+      // Get exact container dimensions with getBoundingClientRect for precision
+      const rect = parentElement.getBoundingClientRect();
+      const containerWidth = rect.width;
+      const containerHeight = rect.height;
+      
+      // Set canvas dimensions to exactly match container
+      canvas.width = containerWidth;
+      canvas.height = containerHeight;
+      
+      // Ensure canvas completely fills its container with no gaps
+      canvas.style.margin = '0';
+      canvas.style.padding = '0';
+      canvas.style.display = 'block';
+      canvas.style.position = 'absolute';
+      canvas.style.left = '0';
+      canvas.style.top = '0';
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+    }
+
     // Set canvas dimensions
-    canvas.width = window.innerWidth
-    canvas.height = window.innerHeight
-    
+    setCanvasDimensions()
+    window.addEventListener("resize", setCanvasDimensions)
+
     // Track last time fruits were spawned
     let lastFruitSpawnTime = Date.now()
 
     // Create a new fruit - simplified
     const createFruit = () => {
-      const types = ["orange", "lemon", "lime"] as const
-      const type = types[Math.floor(Math.random() * types.length)]
-      const radius = Math.random() * 30 + 40 // 40-70 radius
+      const radius = Math.floor(Math.random() * 40) + 50; // 50-90 range for fruit size
       
-      // Distribute fruits across the width of the screen
-      const x = Math.random() * (canvas.width - radius * 2) + radius
-      const y = -radius * 2 // Start above the screen
-
-      // Generate random velocities - adjusted by level
-      const velocityX = (Math.random() - 0.5) * 2 * settings.velocityMultiplier
-      const velocityY = (Math.random() * 1 + 0.5) * settings.velocityMultiplier
-
-      fruitsRef.current.push({
+      // Make sure fruits spawn fully within the canvas borders
+      const x = Math.random() * (canvas.width - radius * 2) + radius;
+      const y = -radius; // Start just above the canvas
+      
+      // Random velocities
+      const velocityX = (Math.random() - 0.5) * 10;
+      const velocityY = Math.random() * 2 + 8;
+      
+      // Get random fruit type
+      const types = ["orange", "lemon", "lime"] as const;
+      const type = types[Math.floor(Math.random() * types.length)];
+      
+      // Create a new fruit
+      const fruit = {
         id: idCounterRef.current++,
-        type,
         x,
         y,
         radius,
         velocityX,
         velocityY,
-        rotation: Math.random() * Math.PI * 2,
-        rotationSpeed: (Math.random() - 0.5) * 0.02 * settings.velocityMultiplier
-      })
+        rotation: 0,
+        rotationSpeed: (Math.random() - 0.5) * 0.2,
+        sliced: false,
+        pieces: [],
+        type,
+      };
+      
+      fruitsRef.current.push(fruit);
     }
 
     // Function to spawn new fruits
@@ -201,9 +249,9 @@ export default function Home() {
       return velocity
     }
 
-    // Draw background - keeping the neon grid but with level-specific colors
+    // Update drawBackground to use zero padding
     const drawBackground = () => {
-      // Create gradient background
+      // Create gradient background - fill entire canvas
       const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height)
       gradient.addColorStop(0, settings.backgroundColor1)
       gradient.addColorStop(1, settings.backgroundColor2)
@@ -211,27 +259,27 @@ export default function Home() {
       ctx.fillStyle = gradient
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-      // Draw grid
+      // Draw grid - draw lines all the way to the edges
       ctx.strokeStyle = settings.gridColor
       ctx.lineWidth = 1
 
-      // Horizontal lines
-      for (let y = 0; y < canvas.height; y += 40) {
+      // Draw horizontal grid lines - from edge to edge
+      for (let y = 0; y <= canvas.height; y += 40) {
         ctx.beginPath()
         ctx.moveTo(0, y)
         ctx.lineTo(canvas.width, y)
         ctx.stroke()
       }
 
-      // Vertical lines
-      for (let x = 0; x < canvas.width; x += 40) {
+      // Draw vertical grid lines - from edge to edge
+      for (let x = 0; x <= canvas.width; x += 40) {
         ctx.beginPath()
         ctx.moveTo(x, 0)
         ctx.lineTo(x, canvas.height)
         ctx.stroke()
       }
 
-      // Draw mountains
+      // Draw mountains filling the entire bottom
       ctx.fillStyle = settings.mountainColor
       ctx.beginPath()
       ctx.moveTo(0, canvas.height)
@@ -243,7 +291,7 @@ export default function Home() {
       for (let i = 0; i <= segments; i++) {
         const x = i * segmentWidth
         const heightFactor = Math.sin((i / segments) * Math.PI) * 0.5 + 0.5
-        const y = canvas.height - heightFactor * canvas.height * 0.3
+        const y = canvas.height - heightFactor * canvas.height * 0.2
         ctx.lineTo(x, y)
       }
 
@@ -309,58 +357,109 @@ export default function Home() {
       ctx.restore()
     }
 
-    // Draw a sliced fruit - simplified but keeping the visual effect
+    // Draw a sliced fruit - revised to use halves with decomposition and better rotation
     const drawSlicedFruit = (sliced: SlicedFruit) => {
-      const { x, y, radius, rotation, type, pieces, timeLeft } = sliced
+      // Calculate decomposition progress (0 to 5 layers)
+      const decompositionLayers = Math.min(5, Math.floor((120 - sliced.timeLeft) / 24));
       
-      // Draw pieces
-      pieces.forEach((piece, index) => {
-        ctx.save()
+      // Draw each half
+      for (let i = 0; i < sliced.pieces.length; i++) {
+        const piece = sliced.pieces[i];
+        const isFirstHalf = i === 0;
         
-        // Calculate position based on timeLeft - faster animation at higher levels
-        const progress = (30 - timeLeft) / 30
-        const pieceX = x + piece.dx * progress * 10 * settings.velocityMultiplier
-        const pieceY = y + piece.dy * progress * 10 * settings.velocityMultiplier + 
-                       progress * progress * 20 * settings.velocityMultiplier
+        // Update the piece's position based on current dx, dy values
+        piece.x = sliced.x + piece.dx;
+        piece.y = sliced.y + piece.dy;
         
-        ctx.translate(pieceX, pieceY)
-        ctx.rotate(rotation + index * Math.PI/2)
+        // Draw fruit half using the piece's x and y directly
+        ctx.save();
+        ctx.translate(piece.x, piece.y);
         
-        // Draw a quarter circle for each piece
-        ctx.beginPath()
-        ctx.moveTo(0, 0)
-        ctx.arc(0, 0, radius, index * Math.PI/2, (index + 1) * Math.PI/2)
-        ctx.closePath()
+        // Calculate proper rotation based on slice angle
+        // For first half, rotate 90° to the right of slice angle
+        // For second half, rotate 90° to the left of slice angle
+        const baseRotation = isFirstHalf ? 
+          sliced.rotation - Math.PI/2 : 
+          sliced.rotation + Math.PI/2;
+          
+        // Add some rotation based on velocities
+        const additionalRotation = ((piece.velocityX || 0) * 0.01) + ((piece.velocityY || 0) * 0.015);
+        ctx.rotate(baseRotation + additionalRotation * sliced.timeLeft * 0.1);
         
-        // Use the same gradient as the fruit
-        const gradient = ctx.createRadialGradient(-radius * 0.3, -radius * 0.3, 0, 0, 0, radius)
-        gradient.addColorStop(0, type === "orange" ? "#FFAB40" : type === "lemon" ? "#FFF59D" : "#AED581")
-        gradient.addColorStop(0.7, fruitColors[type])
-        gradient.addColorStop(1, type === "orange" ? "#E65100" : type === "lemon" ? "#F57F17" : "#33691E")
+        // Draw a half of the fruit
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        // Draw semicircle with flat side aligned to slice direction
+        const startAngle = 0;
+        const endAngle = Math.PI;
+        ctx.arc(0, 0, piece.radius, startAngle, endAngle);
+        ctx.closePath();
         
-        ctx.fillStyle = gradient
-        ctx.fill()
+        // Create layers for the fruit (from outer to inner)
+        const layerCount = 5; // 5 layers total
+        const layerWidth = piece.radius / layerCount;
         
-        // Neon outline with intensity based on level
-        ctx.strokeStyle = `${fruitColors[type]}AA`
-        ctx.lineWidth = 3
-        ctx.stroke()
+        // Draw each layer from outer to inner
+        for (let layer = 0; layer < layerCount; layer++) {
+          const layerRadius = piece.radius - (layer * layerWidth);
+          
+          // Skip if this layer is too small
+          if (layerRadius <= 0) continue;
+          
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.arc(0, 0, layerRadius, startAngle, endAngle);
+          ctx.closePath();
+          
+          // Determine if this layer should be decomposed (green)
+          const isDecomposed = layer < decompositionLayers;
+          
+          // Fill based on decomposition state
+          if (isDecomposed) {
+            // Green decomposition with pulsing effect
+            const pulseIntensity = 0.2 * Math.sin((120 - sliced.timeLeft) * 0.2) + 0.8;
+            
+            // Different green shades for different layers
+            if (layer === 0) {
+              // Outermost layer - brightest green
+              ctx.fillStyle = "#CAFFCA";
+            } else if (layer === 1) {
+              // Second layer - medium green
+              ctx.fillStyle = `rgba(102, 204, 102, ${pulseIntensity})`;
+            } else {
+              // Inner layers - darker green
+              ctx.fillStyle = "#227722";
+            }
+          } else {
+            // Normal fruit color
+            ctx.fillStyle = fruitColors[sliced.type];
+          }
+          ctx.fill();
+          
+          // Add neon glow for the outer layer
+          if (layer === 0) {
+            ctx.shadowColor = isDecomposed ? "#66CC66" : fruitColors[sliced.type];
+            ctx.shadowBlur = settings.glowIntensity;
+            ctx.strokeStyle = isDecomposed ? 
+              `rgba(102, 204, 102, ${0.7 + 0.3 * Math.sin((120 - sliced.timeLeft) * 0.2)})` : 
+              fruitColors[sliced.type];
+            ctx.lineWidth = isDecomposed ? 3 : 2;
+            ctx.stroke();
+          }
+        }
         
-        ctx.restore()
-      })
-      
-      // Draw "SLICED!" text
-      const opacity = timeLeft / 30
-      
-      ctx.save()
-      ctx.font = `bold ${Math.floor(radius/2)}px monospace`
-      ctx.textAlign = "center"
-      ctx.textBaseline = "middle"
-      ctx.shadowColor = settings.primaryColor
-      ctx.shadowBlur = settings.glowIntensity
-      ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`
-      ctx.fillText("SLICED!", x, y)
-      ctx.restore()
+        // Draw slice edge with green decomposition color for contrast
+        ctx.beginPath();
+        ctx.moveTo(-piece.radius, 0);
+        ctx.lineTo(piece.radius, 0);
+        ctx.strokeStyle = decompositionLayers > 0 ? "#4CAF50" : "#FFFFFF";
+        ctx.shadowColor = decompositionLayers > 0 ? "#00FF00" : "#FFFFFF";
+        ctx.shadowBlur = settings.glowIntensity;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        ctx.restore();
+      }
     }
     
     // Draw floating score text
@@ -395,11 +494,39 @@ export default function Home() {
         const distSquared = dx * dx + dy * dy
         
         if (distSquared <= fruit.radius * fruit.radius * 1.5) {
-          // Create sliced fruit with 4 pieces
-          const pieces = Array.from({ length: 4 }, (_, i) => ({
-            dx: Math.cos(i * Math.PI/2) * 2 * settings.velocityMultiplier,
-            dy: Math.sin(i * Math.PI/2) * 2 * settings.velocityMultiplier - 1 // Add some upward velocity
-          }))
+          // Calculate slice angle
+          const sliceAngle = Math.atan2(dy, dx);
+          
+          // Calculate perpendicular directions to the slice
+          const perpAngle1 = sliceAngle + Math.PI/2;
+          const perpAngle2 = sliceAngle - Math.PI/2;
+          
+          // Apply immediate offset to separate the halves
+          const immediateOffset = fruit.radius * 0.3;
+          
+          // Create the two halves with initial separation
+          const pieces = [
+            {
+              // First half
+              dx: Math.cos(perpAngle1) * immediateOffset,
+              dy: Math.sin(perpAngle1) * immediateOffset,
+              velocityX: Math.cos(perpAngle1) * 2 * settings.velocityMultiplier,
+              velocityY: Math.sin(perpAngle1) * 2 * settings.velocityMultiplier - 1,
+              x: fruit.x + Math.cos(perpAngle1) * immediateOffset,
+              y: fruit.y + Math.sin(perpAngle1) * immediateOffset,
+              radius: fruit.radius
+            },
+            {
+              // Second half
+              dx: Math.cos(perpAngle2) * immediateOffset,
+              dy: Math.sin(perpAngle2) * immediateOffset,
+              velocityX: Math.cos(perpAngle2) * 2 * settings.velocityMultiplier,
+              velocityY: Math.sin(perpAngle2) * 2 * settings.velocityMultiplier - 1,
+              x: fruit.x + Math.cos(perpAngle2) * immediateOffset,
+              y: fruit.y + Math.sin(perpAngle2) * immediateOffset,
+              radius: fruit.radius
+            }
+          ];
           
           slicedFruitsRef.current.push({
             id: fruit.id,
@@ -407,10 +534,10 @@ export default function Home() {
             y: fruit.y,
             type: fruit.type,
             radius: fruit.radius,
-            rotation: fruit.rotation,
-            timeLeft: 30,
+            rotation: sliceAngle, // Use slice angle directly
+            timeLeft: 120,
             pieces
-          })
+          });
           
           // Remove fruit
           fruitsRef.current = fruitsRef.current.filter(f => f.id !== fruit.id)
@@ -468,8 +595,10 @@ export default function Home() {
 
       // Update and draw fruits
       const updatedFruits: Fruit[] = []
+      const fruitsToRemove: number[] = []
 
-      for (const fruit of fruitsRef.current) {
+      for (let i = 0; i < fruitsRef.current.length; i++) {
+        const fruit = fruitsRef.current[i]
         // Apply gravity - adjusted by level
         fruit.velocityY += settings.gravityFactor
         
@@ -484,18 +613,45 @@ export default function Home() {
         // Update rotation
         fruit.rotation += fruit.rotationSpeed
         
-        // Simple wall collision
-        if (fruit.x - fruit.radius < 0) {
-          fruit.x = fruit.radius
-          fruit.velocityX = Math.abs(fruit.velocityX) * 0.9
-        } else if (fruit.x + fruit.radius > canvas.width) {
-          fruit.x = canvas.width - fruit.radius
-          fruit.velocityX = -Math.abs(fruit.velocityX) * 0.9
+        // Update wall collision detection to match new dimensions
+        // Simple wall collision with minimal padding
+        const wallPadding = 0; // No padding
+        if (fruit.x - fruit.radius < wallPadding) {
+          fruit.x = fruit.radius + wallPadding;
+          fruit.velocityX = Math.abs(fruit.velocityX) * 0.9;
+        } else if (fruit.x + fruit.radius > canvas.width - wallPadding) {
+          fruit.x = canvas.width - fruit.radius - wallPadding;
+          fruit.velocityX = -Math.abs(fruit.velocityX) * 0.9;
         }
         
-        // Remove if below screen
+        // Update off-screen detection to be consistent
+        // A fruit is off-screen if it's fully below the canvas
         if (fruit.y - fruit.radius > canvas.height) {
-          continue
+          // Mark fruit for removal if it's below the screen
+          fruitsToRemove.push(i);
+          
+          // Only count unsliced fruits as missed
+          if (!fruit.sliced) {
+            setMissedFruits(prev => {
+              const newMissedCount = prev + 1;
+              // Check for game over condition
+              if (newMissedCount >= 3) {
+                setGameState("game_over");
+              }
+              return newMissedCount;
+            });
+          }
+        } else {
+          // Check if all pieces of a sliced fruit are off screen
+          if (fruit.sliced && fruit.pieces.length > 0) {
+            const allPiecesOffScreen = fruit.pieces.every((piece: FruitPiece) => 
+              piece.y > canvas.height + piece.radius
+            );
+            
+            if (allPiecesOffScreen) {
+              fruitsToRemove.push(i);
+            }
+          }
         }
         
         // Keep fruit
@@ -506,22 +662,52 @@ export default function Home() {
       }
       
       // Update fruits ref
-      fruitsRef.current = updatedFruits
+      fruitsRef.current = updatedFruits.filter((_, i) => !fruitsToRemove.includes(i))
       
       // Update and draw sliced fruits
       const updatedSlicedFruits: SlicedFruit[] = []
       
       for (const sliced of slicedFruitsRef.current) {
-        if (sliced.timeLeft <= 0) continue
+        // Don't immediately remove sliced fruits when timeLeft reaches 0
+        // Instead, allow them to fall offscreen
         
-        // Update timeLeft - animations run faster at higher levels
-        sliced.timeLeft -= 1 * (1 + (level * 0.1))
+        // Update each piece with gravity and physics
+        sliced.pieces.forEach(piece => {
+          // Apply gravity to vertical velocity - same as for regular fruits
+          piece.velocityY = (piece.velocityY || 0) + settings.gravityFactor;
+          
+          // Cap velocities to prevent extreme values
+          piece.velocityX = capVelocity(piece.velocityX || 0, 3 * settings.velocityMultiplier);
+          piece.velocityY = capVelocity(piece.velocityY, 4 * settings.velocityMultiplier);
+          
+          // Update positions using velocities
+          piece.dx += piece.velocityX || 0;
+          piece.dy += piece.velocityY;
+          
+          // Also update actual x, y positions
+          piece.x = sliced.x + piece.dx;
+          piece.y = sliced.y + piece.dy;
+          
+          // Add a small amount of damping to simulate air resistance
+          piece.velocityX = piece.velocityX ? piece.velocityX * 0.98 : 0;
+        });
         
-        // Draw sliced fruit
-        drawSlicedFruit(sliced)
+        // Decrement timeLeft for decomposition effect (but not for removal)
+        sliced.timeLeft = Math.max(0, sliced.timeLeft - 1);
         
-        // Keep slice
-        updatedSlicedFruits.push(sliced)
+        // Check if all pieces are below the screen with consistent padding
+        const allPiecesBelowScreen = sliced.pieces.every(piece => {
+          // Use the piece's x, y position directly
+          return piece.y > canvas.height + piece.radius;
+        });
+        
+        // Only remove if all pieces are below the screen
+        if (!allPiecesBelowScreen) {
+          updatedSlicedFruits.push(sliced);
+          
+          // Draw sliced fruit
+          drawSlicedFruit(sliced);
+        }
       }
       
       slicedFruitsRef.current = updatedSlicedFruits
@@ -545,15 +731,6 @@ export default function Home() {
       
       floatingScoresRef.current = updatedFloatingScores
       
-      // Draw score
-      ctx.font = "bold 32px monospace"
-      ctx.fillStyle = "#FFFFFF"
-      ctx.shadowColor = settings.primaryColor
-      ctx.shadowBlur = settings.glowIntensity
-      ctx.textAlign = "left"
-      ctx.textBaseline = "top"
-      ctx.fillText(`LEVEL: ${level}   SCORE: ${score}`, 20, 20)
-
       // Continue animation
       animationRef.current = requestAnimationFrame(updateGame)
     }
@@ -567,6 +744,7 @@ export default function Home() {
         cancelAnimationFrame(animationRef.current)
       }
       clearInterval(fruitInterval)
+      window.removeEventListener("resize", setCanvasDimensions)
       canvas.removeEventListener("mousemove", handleMouseMove)
       canvas.removeEventListener("touchmove", handleTouchMove)
     }
@@ -588,6 +766,14 @@ export default function Home() {
     idCounterRef.current = 0
   }
 
+  // Handle going back to title screen
+  const handleBackToTitle = () => {
+    setGameState("title")
+    // Reset game state
+    setMissedFruits(0)
+    setScore(0)
+  }
+
   // CRT screen effect for text
   const CRTText = ({ children, className = "", fontSize = "text-4xl" }: { 
     children: React.ReactNode; 
@@ -603,116 +789,176 @@ export default function Home() {
   }
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-purple-900 font-mono">
-      {/* Game canvas */}
-      <canvas ref={canvasRef} className="absolute inset-0 z-10" />
-
-      {/* UI Overlay - Make sure it doesn't block pointer events when game is playing */}
-      <div className={`absolute inset-0 z-20 flex flex-col items-center justify-center ${gameState === "playing" ? "pointer-events-none" : ""}`}>
-        {gameState === "title" && (
-          <div className="flex flex-col items-center justify-center space-y-8 pointer-events-auto">
-            <div className="text-center">
-              <CRTText className="text-6xl md:text-8xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 mb-2">
-                NEON FRUIT
-              </CRTText>
-              <CRTText className="text-5xl md:text-7xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500">
-                NINJA
-              </CRTText>
-            </div>
-
-            <div className="relative">
-              <button
-                onClick={handleStartSelection}
-                className="relative px-10 py-4 text-2xl font-bold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg overflow-hidden group"
-              >
-                <span className="relative z-10">START GAME</span>
-                <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
-              </button>
-            </div>
-
-            <div className="text-center max-w-md px-4">
-              <CRTText fontSize="text-lg" className="text-cyan-300">
-                Slice fruits in a neon dimension!
-              </CRTText>
-              <CRTText fontSize="text-sm" className="text-pink-300 mt-2">
-                Just hover over fruits to slice them and score points
-              </CRTText>
-            </div>
+    <div className="relative w-full h-screen overflow-hidden bg-black font-mono">
+      {/* Additional background layers for depth effect */}
+      <div className="absolute inset-0 z-0">
+        <div className="absolute top-1/4 left-1/4 w-1/2 h-1/2 rounded-full bg-purple-900 opacity-10 blur-3xl"></div>
+        <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 rounded-full bg-cyan-900 opacity-5 blur-2xl"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-1/3 h-1/3 rounded-full bg-pink-900 opacity-10 blur-3xl"></div>
+      </div>
+      
+      {/* Floating container wrapper with proper padding */}
+      <div className="relative z-10 w-full h-full flex items-center justify-center">
+        <div className="floating-container layered-bg w-11/12 h-5/6 flex flex-col overflow-hidden border-[2px] border-cyan-400 shadow-[0_0_15px_rgba(0,255,255,0.5)]">
+          {/* Game canvas container - remove all padding/margin */}
+          <div className="relative w-full h-full overflow-hidden p-0 m-0">
+            <canvas 
+              ref={canvasRef} 
+              className="w-full h-full block absolute inset-0 m-0 p-0" 
+            />
           </div>
+
+          {/* UI Overlay - everything else stays the same */}
+          <div className={`absolute inset-0 z-20 flex flex-col items-center justify-center ${gameState === "playing" ? "pointer-events-none" : ""}`}>
+            {gameState === "title" && (
+              <div className="flex flex-col items-center justify-center space-y-8 pointer-events-auto">
+                <div className="text-center">
+                  <CRTText className="text-6xl md:text-8xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 mb-2">
+                    NEON FRUIT
+                  </CRTText>
+                  <CRTText className="text-5xl md:text-7xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500">
+                    NINJA
+                  </CRTText>
+                </div>
+
+                <div className="relative">
+                  <button
+                    onClick={handleStartSelection}
+                    className="relative px-10 py-4 text-2xl font-bold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg overflow-hidden group"
+                  >
+                    <span className="relative z-10">START GAME</span>
+                    <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
+                  </button>
+                </div>
+
+                <div className="text-center max-w-md px-4">
+                  <CRTText fontSize="text-lg" className="text-cyan-300">
+                    Slice fruits in a neon dimension!
+                  </CRTText>
+                  <CRTText fontSize="text-sm" className="text-pink-300 mt-2">
+                    Just hover over fruits to slice them and score points
+                  </CRTText>
+                </div>
+              </div>
+            )}
+            
+            {gameState === "level_select" && (
+              <div className="flex flex-col items-center justify-center space-y-8 pointer-events-auto bg-purple-900 bg-opacity-80 p-8 rounded-xl shadow-xl">
+                <CRTText className="text-4xl md:text-5xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-pink-500">
+                  SELECT DIFFICULTY
+                </CRTText>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <button
+                    onClick={() => handleSelectLevel(1)}
+                    className="px-8 py-6 text-xl font-bold text-white bg-gradient-to-r from-indigo-600 to-blue-600 rounded-lg hover:from-indigo-500 hover:to-blue-500 transition-colors duration-300 w-64 h-48 flex flex-col items-center justify-center"
+                  >
+                    <span className="text-2xl mb-2">LEVEL 1</span>
+                    <span className="text-cyan-300 text-sm mb-1">CHILL MODE</span>
+                    <span className="text-white text-xs opacity-80">Normal Speed</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => handleSelectLevel(2)}
+                    className="px-8 py-6 text-xl font-bold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg hover:from-purple-500 hover:to-pink-500 transition-colors duration-300 w-64 h-48 flex flex-col items-center justify-center"
+                  >
+                    <span className="text-2xl mb-2">LEVEL 2</span>
+                    <span className="text-pink-300 text-sm mb-1">HYPER MODE</span>
+                    <span className="text-white text-xs opacity-80">50% Faster</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => handleSelectLevel(3)}
+                    className="px-8 py-6 text-xl font-bold text-white bg-gradient-to-r from-red-600 to-yellow-600 rounded-lg hover:from-red-500 hover:to-yellow-500 transition-colors duration-300 w-64 h-48 flex flex-col items-center justify-center"
+                  >
+                    <span className="text-2xl mb-2">LEVEL 3</span>
+                    <span className="text-yellow-300 text-sm mb-1">EXTREME MODE</span>
+                    <span className="text-white text-xs opacity-80">120% Faster</span>
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* Game over screen */}
+            {gameState === "game_over" && (
+              <div className="flex flex-col items-center justify-center space-y-8 pointer-events-auto bg-red-900 bg-opacity-80 p-8 rounded-xl shadow-xl">
+                <CRTText className="text-4xl md:text-5xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-yellow-500">
+                  GAME OVER
+                </CRTText>
+                <CRTText fontSize="text-2xl" className="text-white">
+                  YOUR SCORE: {score}
+                </CRTText>
+                <button
+                  onClick={handleBackToTitle}
+                  className="mt-4 px-8 py-3 text-xl font-bold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg hover:bg-purple-500 transition-colors duration-300"
+                >
+                  BACK TO TITLE
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Add custom styles for animations */}
+          <style jsx global>{`
+            @keyframes glitch {
+              0% {
+                transform: translate(0);
+              }
+              20% {
+                transform: translate(-2px, 2px);
+              }
+              40% {
+                transform: translate(-2px, -2px);
+              }
+              60% {
+                transform: translate(2px, 2px);
+              }
+              80% {
+                transform: translate(2px, -2px);
+              }
+              100% {
+                transform: translate(0);
+              }
+            }
+            
+            .animate-glitch {
+              animation: glitch 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+            }
+          `}</style>
+        </div>
+      </div>
+      
+      {/* System UI elements - moved score and back button here */}
+      <div className="absolute top-5 left-5 z-30 flex items-center space-x-6">
+        {/* Back button - only show when in a game state that's not the title */}
+        {gameState !== "title" && (
+          <button
+            onClick={handleBackToTitle}
+            className="px-4 py-1 text-sm font-bold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded hover:from-purple-500 hover:to-pink-500 transition-colors duration-300 shadow-lg shadow-purple-500/20"
+          >
+            « BACK
+          </button>
         )}
         
-        {gameState === "level_select" && (
-          <div className="flex flex-col items-center justify-center space-y-8 pointer-events-auto bg-purple-900 bg-opacity-80 p-8 rounded-xl shadow-xl">
-            <CRTText className="text-4xl md:text-5xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-pink-500">
-              SELECT DIFFICULTY
-            </CRTText>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <button
-                onClick={() => handleSelectLevel(1)}
-                className="px-8 py-6 text-xl font-bold text-white bg-gradient-to-r from-indigo-600 to-blue-600 rounded-lg hover:from-indigo-500 hover:to-blue-500 transition-colors duration-300 w-64 h-48 flex flex-col items-center justify-center"
-              >
-                <span className="text-2xl mb-2">LEVEL 1</span>
-                <span className="text-cyan-300 text-sm mb-1">CHILL MODE</span>
-                <span className="text-white text-xs opacity-80">Normal Speed</span>
-              </button>
-              
-              <button
-                onClick={() => handleSelectLevel(2)}
-                className="px-8 py-6 text-xl font-bold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg hover:from-purple-500 hover:to-pink-500 transition-colors duration-300 w-64 h-48 flex flex-col items-center justify-center"
-              >
-                <span className="text-2xl mb-2">LEVEL 2</span>
-                <span className="text-pink-300 text-sm mb-1">HYPER MODE</span>
-                <span className="text-white text-xs opacity-80">50% Faster</span>
-              </button>
-              
-              <button
-                onClick={() => handleSelectLevel(3)}
-                className="px-8 py-6 text-xl font-bold text-white bg-gradient-to-r from-red-600 to-yellow-600 rounded-lg hover:from-red-500 hover:to-yellow-500 transition-colors duration-300 w-64 h-48 flex flex-col items-center justify-center"
-              >
-                <span className="text-2xl mb-2">LEVEL 3</span>
-                <span className="text-yellow-300 text-sm mb-1">EXTREME MODE</span>
-                <span className="text-white text-xs opacity-80">120% Faster</span>
-              </button>
+        {/* Always display score and level when playing */}
+        {gameState === "playing" && (
+          <div className="flex space-x-4">
+            <div className="text-cyan-500 font-mono text-sm md:text-base border border-cyan-500/30 bg-black/50 px-3 py-1 rounded shadow-lg shadow-cyan-500/20">
+              <span className="text-cyan-300 mr-2">LVL:</span>{level}
             </div>
-            
-            <button
-              onClick={() => setGameState("title")}
-              className="mt-4 px-6 py-2 text-sm font-bold text-white bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors duration-300"
-            >
-              BACK
-            </button>
+            <div className="text-pink-500 font-mono text-sm md:text-base border border-pink-500/30 bg-black/50 px-3 py-1 rounded shadow-lg shadow-pink-500/20">
+              <span className="text-pink-300 mr-2">SCORE:</span>{score}
+            </div>
+            <div className="text-red-500 font-mono text-sm md:text-base border border-red-500/30 bg-black/50 px-3 py-1 rounded shadow-lg shadow-red-500/20">
+              <span className="text-red-300 mr-2">MISSED:</span>{missedFruits}/3
+            </div>
           </div>
         )}
       </div>
-
-      {/* Add custom styles for animations */}
-      <style jsx global>{`
-        @keyframes glitch {
-          0% {
-            transform: translate(0);
-          }
-          20% {
-            transform: translate(-2px, 2px);
-          }
-          40% {
-            transform: translate(-2px, -2px);
-          }
-          60% {
-            transform: translate(2px, 2px);
-          }
-          80% {
-            transform: translate(2px, -2px);
-          }
-          100% {
-            transform: translate(0);
-          }
-        }
-        
-        .animate-glitch {
-          animation: glitch 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
-        }
-      `}</style>
+      
+      {/* Decorative neon elements */}
+      <div className="absolute bottom-5 left-5 z-30 text-cyan-500 text-xs font-mono opacity-70">NEON DIMENSION v1.0</div>
+      <div className="absolute top-5 right-5 z-30 text-pink-500 text-xs font-mono opacity-70">[SYSTEM ONLINE]</div>
     </div>
   )
 }
